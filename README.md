@@ -6,6 +6,8 @@
 
 MTT (Management Task and Todo)は、KGI / KPI / KAI の3層構造で長期・中期・短期の目標を整理できるビジネス向けタスク管理アプリです。ブラウザのCookieを使用してローカルにデータを保存し、Firebase Authenticationでログインするとクラウド同期が有効になります。
 
+**デプロイURL**: https://management-tt.web.app
+
 ## 特徴
 
 - 🎯 **KGI / KPI / KAI の3層管理** - 長期・中期・短期の目標を親子関係で整理
@@ -99,13 +101,18 @@ npm install
 
 3. Firebase設定ファイルを作成 (`.env.local`):
 ```bash
-NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
-NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=your_measurement_id
+# Firebase Project: onlineweb-tools
+# Hosting Site: management-tt
+# URL: https://management-tt.web.app
+
+NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key_here
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=onlineweb-tools.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=onlineweb-tools
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=onlineweb-tools.firebasestorage.app
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id_here
+NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id_here
+NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=your_measurement_id_here
+NEXT_PUBLIC_FIREBASE_DATABASE_NAME=management-tt
 ```
 
 詳細は `docs/firebase-setup.md` を参照してください。
@@ -166,9 +173,9 @@ npm start
 
 ### Firebase Hostingへのデプロイ
 
-このプロジェクトはFirebase Hostingへのデプロイを想定しています。
+このプロジェクトは`onlineweb-tools`プロジェクト内の`management-tt`サイトとしてデプロイされます。
 
-#### 初回セットアップ
+#### デプロイ手順
 
 1. Firebase CLIをインストール:
 ```bash
@@ -180,54 +187,30 @@ npm install -g firebase-tools
 firebase login
 ```
 
-3. Firebaseプロジェクトを初期化:
+3. management-ttサイトにデプロイ:
 ```bash
-firebase init
-```
-- Hosting、Authentication、Firestoreを選択
-- プロジェクトを選択または新規作成
-- publicディレクトリ: `out`
-- Single-page app: `Yes`
-- GitHub Actionsでの自動デプロイ: お好みで選択
-
-4. Next.jsの静的エクスポート設定を確認 (`next.config.js`):
-```javascript
-module.exports = {
-  output: 'export',
-  images: {
-    unoptimized: true,
-  },
-}
+firebase deploy --only hosting:management-tt
 ```
 
-#### デプロイ手順
-
-1. プロダクションビルドを実行:
-```bash
-npm run build
+4. デプロイURL:
+```
+https://management-tt.web.app
 ```
 
-2. Firebaseにデプロイ:
+#### その他のデプロイコマンド
+
 ```bash
+# 全サービスをデプロイ
 firebase deploy
+
+# Firestoreルールのみデプロイ
+firebase deploy --only firestore:management-tt
+
+# Hostingとfirestoreを同時にデプロイ
+firebase deploy --only hosting:management-tt,firestore:management-tt
 ```
 
-3. ホスティングのみデプロイする場合:
-```bash
-firebase deploy --only hosting
-```
-
-#### Firebase認証の設定
-
-1. [Firebase Console](https://console.firebase.google.com/)でプロジェクトを開く
-2. Authentication → Sign-in methodで以下のプロバイダを有効化:
-   - Google
-   - メール/パスワード
-   - (オプション) Apple、Twitter(X)、LINE
-3. 認証ドメインを確認・追加
-4. Firebase SDK設定をプロジェクトに追加 (`.env.local`)
-
-詳細は `docs/auth-roadmap.md` を参照してください。
+詳細は `docs/firebase-setup.md` を参照してください。
 
 ## 実装済み機能
 
