@@ -7,7 +7,6 @@
   },
   "hosting": {
     "target": "management-tt",
-    "public": ".next",
     "source": ".",
     "ignore": [
       "firebase.json",
