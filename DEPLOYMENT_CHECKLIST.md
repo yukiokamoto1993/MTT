@@ -20,11 +20,17 @@ Firebase Console → Authentication → Sign-in method で確認
 #### 承認済みドメイン
 以下のドメインが登録されているか確認:
 - [ ] `localhost` (開発用)
-- [ ] `management-tt.web.app`
+- [ ] `management-tt.web.app` ⚠️ **重要: これがないと本番環境でGoogle認証が失敗する**
 - [ ] `management-tt.firebaseapp.com`
 - [ ] `onlineweb-tools.firebaseapp.com`
 
 Firebase Console → Authentication → Settings → 承認済みドメイン で確認・追加
+
+**ドメイン追加方法:**
+1. 「ドメインを追加」ボタンをクリック
+2. `management-tt.web.app` を入力して追加
+3. 同様に `management-tt.firebaseapp.com` も追加
+4. 詳細は `docs/fix-unauthorized-domain.md` を参照
 
 ### 3. Firestore Database
 

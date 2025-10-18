@@ -223,6 +223,23 @@ firebase deploy --only hosting:management-tt,firestore:management-tt
 - ✅ ダークモード対応
 - ✅ インライン編集
 
+## トラブルシューティング
+
+### Google認証エラー: "auth/unauthorized-domain"
+
+**症状**: 本番環境 (https://management-tt.web.app) でGoogleログインを試みると、「認証でエラーが発生しました (auth/unauthorized-domain)」というエラーが表示される。
+
+**原因**: Firebase Authenticationの承認済みドメインに `management-tt.web.app` が登録されていない。
+
+**解決方法**:
+1. [Firebase Console](https://console.firebase.google.com/) → `onlineweb-tools` プロジェクトを開く
+2. Authentication → Settings → 承認済みドメイン
+3. 「ドメインを追加」で以下を追加:
+   - `management-tt.web.app`
+   - `management-tt.firebaseapp.com`
+
+詳細な手順は [docs/fix-unauthorized-domain.md](docs/fix-unauthorized-domain.md) を参照してください。
+
 ## 今後の機能
 
 - [ ] X (Twitter) / Apple / LINE 認証
