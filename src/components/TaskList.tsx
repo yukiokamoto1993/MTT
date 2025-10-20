@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo } from "react";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import {
   Task,
   TaskLevel,
   TASK_LEVEL_LABELS,
 } from "@/types/task";
-import TaskItem from "./TaskItem";
+import SortableTaskItem from "./SortableTaskItem";
 
 interface TaskListProps {
   tasks: Task[];
@@ -22,6 +23,13 @@ interface TaskListProps {
   onRequestCreate: (level: TaskLevel) => void;
   onSummaryInteractionChange: (level: TaskLevel, isActive: boolean) => void;
   hiddenSummaryLevels: TaskLevel[];
+  activeId?: string | null;
+  overId?: string | null;
+  isDroppable?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
 }
 
 const summaryStyles: Record<
@@ -106,6 +114,13 @@ export default function TaskList({
   onRequestCreate,
   onSummaryInteractionChange,
   hiddenSummaryLevels,
+  activeId,
+  overId,
+  isDroppable,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
 }: TaskListProps) {
   const flattened = useMemo(() => flattenTasks(tasks), [tasks]);
   const hiddenSet = useMemo(
@@ -134,10 +149,38 @@ export default function TaskList({
   return (
     <div className="flex flex-col gap-6">
       <section>
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-          目標サマリー
-        </h2>
-  <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 overflow-hidden">
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+            目標サマリー
+          </h2>
+          <div className="flex gap-2">
+            {onUndo && canUndo && (
+              <button
+                onClick={onUndo}
+                className="rounded-lg bg-gray-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-gray-700 flex items-center gap-1.5"
+                title="一つ前に戻す (Undo)"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                </svg>
+                元に戻す
+              </button>
+            )}
+            {onRedo && canRedo && (
+              <button
+                onClick={onRedo}
+                className="rounded-lg bg-gray-600 px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-gray-700 flex items-center gap-1.5"
+                title="やり直す (Redo)"
+              >
+                やり直す
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+  <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {(() => {
             const levels = (Object.keys(stats) as TaskLevel[]).filter(
               (level) => !hiddenSet.has(level)
@@ -205,32 +248,38 @@ export default function TaskList({
         </div>
       </section>
 
-      <div className="max-h-[65vh] overflow-y-auto pr-1 sm:pr-2">
+      <div>
         {hasNoTasks ? (
           <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center text-gray-500 shadow-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300">
             <p className="text-lg font-medium">まだ目標が登録されていません</p>
             <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-              上のフォームからKGI（長期目標）を作成して、KPIやKAIを紐づけていきましょう。
+              上のフォームからKGI(長期目標)を作成して、KPIやKAIを紐づけていきましょう。
             </p>
           </div>
         ) : (
           <div className="space-y-2 pb-2">
-            {tasks.map((task) => (
-              <TaskItem
-                key={task.id}
-                task={task}
-                onToggle={onToggleTask}
-                onDelete={onDeleteTask}
-                onUpdate={onUpdateTask}
-                onAddChild={onAddChildTask}
-                ancestorIds={[]}
-                depth={0}
-                parentId={undefined}
-                onSummaryLevelInteractionChange={
-                  onSummaryInteractionChange
-                }
-              />
-            ))}
+            <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
+              {tasks.map((task) => (
+                <SortableTaskItem
+                  key={task.id}
+                  id={task.id}
+                  task={task}
+                  onToggle={onToggleTask}
+                  onDelete={onDeleteTask}
+                  onUpdate={onUpdateTask}
+                  onAddChild={onAddChildTask}
+                  ancestorIds={[]}
+                  depth={0}
+                  parentId={undefined}
+                  onSummaryLevelInteractionChange={
+                    onSummaryInteractionChange
+                  }
+                  activeId={activeId}
+                  overId={overId}
+                  isDroppable={isDroppable}
+                />
+              ))}
+            </SortableContext>
           </div>
         )}
       </div>

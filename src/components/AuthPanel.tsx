@@ -11,51 +11,10 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { auth } from "@/lib/firebase";
 
-interface ProviderButtonProps {
-  provider: "google" | "x" | "apple" | "line";
-  label: string;
-  onClick: (provider: ProviderButtonProps["provider"]) => void;
-  disabled?: boolean;
-}
-
 type FirebaseAuthError = {
   code?: string;
   message: string;
 };
-
-const providerStyles: Record<ProviderButtonProps["provider"], string> = {
-  google:
-    "bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-60 disabled:hover:bg-white dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700",
-  x: "bg-black text-white hover:bg-gray-900",
-  apple: "bg-gray-900 text-white hover:bg-black",
-  line: "bg-emerald-500 text-white hover:bg-emerald-600",
-};
-
-const providerLabels: Record<ProviderButtonProps["provider"], string> = {
-  google: "Googleで続行",
-  x: "Xで続行",
-  apple: "Appleで続行",
-  line: "LINEで続行",
-};
-
-function ProviderButton({ provider, label, onClick, disabled }: ProviderButtonProps) {
-  return (
-    <button
-      type="button"
-      onClick={() => onClick(provider)}
-      disabled={disabled}
-      className={`flex items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold transition ${providerStyles[provider]}`}
-      aria-label={label}
-    >
-      <span>{label}</span>
-    </button>
-  );
-}
-
-function notifyPending(feature: string) {
-  console.info(`[Auth] ${feature} integration is not yet implemented.`);
-  alert(`${feature} 連携は現在準備中です。`);
-}
 
 function getAuthErrorMessage(error: unknown): string {
   if (error && typeof error === "object" && "code" in error) {
@@ -191,13 +150,7 @@ export default function AuthPanel() {
     }
   };
 
-  const handleProviderClick = async (provider: ProviderButtonProps["provider"]) => {
-    if (provider !== "google") {
-      const providerDisplay = providerLabels[provider].replace("で続行", "");
-      notifyPending(`${providerDisplay}認証`);
-      return;
-    }
-
+  const handleGoogleLogin = async () => {
     try {
       setSubmitting(true);
       clearFeedback();
@@ -247,7 +200,7 @@ export default function AuthPanel() {
           アカウント作成 / ログイン
         </h2>
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          メールアドレスまたはGoogleアカウントを使用して認証できます。他のプロバイダは順次対応予定です。
+          メールアドレスまたはGoogleアカウントで認証できます。
         </p>
       </header>
 
@@ -328,18 +281,18 @@ export default function AuthPanel() {
             シングルサインオン
           </h3>
           <div className="grid gap-3">
-            {(Object.keys(providerLabels) as ProviderButtonProps["provider"][]).map((provider) => (
-              <ProviderButton
-                key={provider}
-                provider={provider}
-                label={providerLabels[provider]}
-                onClick={handleProviderClick}
-                disabled={submitting && provider === "google"}
-              />
-            ))}
+            <button
+              type="button"
+              onClick={handleGoogleLogin}
+              disabled={submitting}
+              className="flex items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-100 disabled:opacity-60 disabled:hover:bg-white dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+              aria-label="Googleで続行"
+            >
+              <span>Googleで続行</span>
+            </button>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Googleログインは利用可能です。他のプロバイダは順次追加予定です。
+            他の認証プロバイダは順次追加予定です。
           </p>
         </div>
       </div>

@@ -1,12 +1,33 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverEvent,
+  DragOverlay,
+  DragStartEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import TaskList from "@/components/TaskList";
 import GoalCreationDialog from "@/components/TaskForm";
 import AuthPanel from "@/components/AuthPanel";
 import UserInfo from "@/components/UserInfo";
 import { Task, TaskFormData, TaskLevel, TASK_LEVEL_FLOW } from "@/types/task";
 import { useTaskSync } from "@/hooks/useTaskSync";
+import {
+  getAllTaskIds,
+  findTaskById,
+  findParentTask,
+  removeTaskFromTree as removeTaskHelper,
+  insertTaskIntoTree,
+  reorderTasks,
+  canMoveToParent,
+  isDescendant,
+} from "@/lib/dragDropHelpers";
 
 const generateId = (): string => {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -74,10 +95,14 @@ const addTaskToParent = (
   const next = items.map((task) => {
     if (task.id === parentId) {
       changed = true;
+      const newTaskWithOrder = {
+        ...newTask,
+        order: task.children.length,
+      };
       return {
         ...task,
         updatedAt: timestamp,
-        children: [...task.children, newTask],
+        children: [...task.children, newTaskWithOrder],
       };
     }
     if (task.children.length > 0) {
@@ -166,6 +191,7 @@ const normalizeTask = (
     typeof raw.updatedAt === "string" && raw.updatedAt.trim().length > 0
       ? raw.updatedAt
       : undefined;
+  const order = typeof raw.order === "number" ? raw.order : 0;
 
   const childSource = Array.isArray(raw.children) ? raw.children : [];
   const nextFallback: TaskLevel = level === "kgi" ? "kpi" : "kai";
@@ -173,8 +199,9 @@ const normalizeTask = (
     level === "kai"
       ? []
       : childSource
-          .map((child) => normalizeTask(child, nextFallback, id))
-          .filter((child): child is Task => child !== null);
+          .map((child, index) => normalizeTask(child, nextFallback, id))
+          .filter((child): child is Task => child !== null)
+          .map((child, index) => ({ ...child, order: child.order || index }));
 
   return {
     id,
@@ -186,6 +213,7 @@ const normalizeTask = (
     level,
     parentId,
     children,
+    order,
   };
 };
 
@@ -197,10 +225,10 @@ const normalizeTasks = (data: unknown): Task[] => {
   return data
     .map((item) => normalizeTask(item, "kgi"))
     .filter((task): task is Task => task !== null)
-    .map((task) =>
+    .map((task, index) =>
       task.level === "kgi"
-        ? task
-        : { ...task, level: "kgi", parentId: undefined }
+        ? { ...task, order: task.order || index }
+        : { ...task, level: "kgi", parentId: undefined, order: task.order || index }
     );
 };
 
@@ -214,12 +242,48 @@ const createTask = (data: TaskFormData, timestamp: string): Task => ({
   level: data.level,
   parentId: data.parentId,
   children: [],
+  order: 0,
 });
 
 export default function Home() {
   const { tasks, setTasks, undo, redo, canUndo, canRedo, isLoaded, isSyncing, isAuthenticated } = useTaskSync();
   const [creationLevel, setCreationLevel] = useState<TaskLevel | null>(null);
   const [summaryInteractionLevels, setSummaryInteractionLevels] = useState<TaskLevel[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
+
+  const taskIds = useMemo(() => getAllTaskIds(tasks), [tasks]);
+  const activeTask = activeId ? findTaskById(tasks, activeId) : null;
+  const overTask = overId ? findTaskById(tasks, overId) : null;
+
+  // ドロップ可能かどうかを判定
+  const isDroppable = useMemo(() => {
+    if (!activeTask || !overTask || activeId === overId) {
+      return false;
+    }
+
+    // 自分自身の子孫にはドロップ不可
+    if (isDescendant(tasks, activeId!, overId!)) {
+      return false;
+    }
+
+    // 同じレベルの場合は常にドロップ可能（並び替え）
+    if (activeTask.level === overTask.level) {
+      return true;
+    }
+
+    // 異なるレベルの場合: overTaskの子にできるか確認
+    const nextLevel = TASK_LEVEL_FLOW[overTask.level];
+    return nextLevel === activeTask.level;
+  }, [activeTask, overTask, activeId, overId, tasks]);
 
   const addTask = (data: TaskFormData) => {
     const timestamp = new Date().toISOString();
@@ -227,7 +291,11 @@ export default function Home() {
 
     setTasks((prev) => {
       if (data.level === "kgi") {
-        return [...prev, newTask];
+        const newTaskWithOrder = {
+          ...newTask,
+          order: prev.length,
+        };
+        return [...prev, newTaskWithOrder];
       }
 
       if (!data.parentId) {
@@ -323,78 +391,166 @@ export default function Home() {
     );
   };
 
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    setOverId(event.over?.id as string | null);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    setActiveId(null);
+    setOverId(null);
+
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
+    setTasks((prevTasks) => {
+      const activeTask = findTaskById(prevTasks, activeId);
+      const overTask = findTaskById(prevTasks, overId);
+
+      if (!activeTask || !overTask) {
+        return prevTasks;
+      }
+
+      // 自分自身の子孫にはドロップできない
+      if (isDescendant(prevTasks, activeId, overId)) {
+        return prevTasks;
+      }
+
+      const activeParent = findParentTask(prevTasks, activeId);
+      const overParent = findParentTask(prevTasks, overId);
+
+      // レベル制約チェック: activeTaskとoverTaskが同じレベルの場合
+      if (activeTask.level === overTask.level) {
+        // 同じレベルのタスク間での移動
+        // overTaskと同じ親の子として追加（並び替え）
+        const { newTasks: tasksAfterRemoval, removedTask } = removeTaskHelper(prevTasks, activeId);
+        if (!removedTask) return prevTasks;
+
+        const targetParentId = overParent?.id || null;
+        let insertIndex = 0;
+
+        if (targetParentId === null) {
+          // ルートレベル
+          insertIndex = tasksAfterRemoval.findIndex(t => t.id === overId);
+          if (insertIndex === -1) insertIndex = tasksAfterRemoval.length;
+        } else {
+          // 親の子として
+          const parent = findTaskById(tasksAfterRemoval, targetParentId);
+          if (parent) {
+            insertIndex = parent.children.findIndex(t => t.id === overId);
+            if (insertIndex === -1) insertIndex = parent.children.length;
+          }
+        }
+
+        const updatedTask = {
+          ...removedTask,
+          parentId: targetParentId || undefined,
+          updatedAt: new Date().toISOString(),
+        };
+
+        const newTasks = insertTaskIntoTree(tasksAfterRemoval, updatedTask, targetParentId, insertIndex);
+        return reorderTasks(newTasks);
+      }
+
+      // 異なるレベル間の移動: overTaskの子にする場合
+      const nextLevel = TASK_LEVEL_FLOW[overTask.level];
+      
+      // overTaskが子を持てて、activeTaskが適切なレベルの場合
+      if (nextLevel && activeTask.level === nextLevel) {
+        const { newTasks: tasksAfterRemoval, removedTask } = removeTaskHelper(prevTasks, activeId);
+        if (!removedTask) return prevTasks;
+
+        const updatedTask = {
+          ...removedTask,
+          parentId: overId,
+          updatedAt: new Date().toISOString(),
+        };
+
+        // overTaskの子の最後に追加
+        const newTasks = insertTaskIntoTree(tasksAfterRemoval, updatedTask, overId, overTask.children.length);
+        return reorderTasks(newTasks);
+      }
+
+      // それ以外の場合は移動不可
+      return prevTasks;
+    });
+  };
+
+  const handleDragCancel = () => {
+    setActiveId(null);
+    setOverId(null);
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-      <div className="container mx-auto max-w-5xl px-4 py-10">
-        <header className="mb-10 text-center">
-          <div className="flex items-center justify-center gap-4 mb-3">
-            <h1 className="text-4xl font-bold text-gray-800 dark:text-white">
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
+    >
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+        <div className="container mx-auto max-w-5xl px-4 py-10">
+          <header className="mb-10 text-center">
+            <h1 className="text-4xl font-bold text-gray-800 dark:text-white mb-3">
               MTT (Management Task and Todo)
             </h1>
-            <div className="flex gap-2">
-              {canUndo && (
-                <button
-                  onClick={undo}
-                  className="rounded-lg bg-gray-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-700 flex items-center gap-2"
-                  title="一つ前に戻す (Undo)"
-                >
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                  </svg>
-                  元に戻す
-                </button>
-              )}
-              {canRedo && (
-                <button
-                  onClick={redo}
-                  className="rounded-lg bg-gray-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-700 flex items-center gap-2"
-                  title="やり直す (Redo)"
-                >
-                  やり直す
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
-                  </svg>
-                </button>
-              )}
-            </div>
+            <p className="text-base text-gray-600 dark:text-gray-300">
+              KGI / KPI / KAI の3層構造でビジネス目標と日々のタスクを一元管理
+            </p>
+          </header>
+
+          {/* 認証情報表示 */}
+          <div className="mb-6">
+            <UserInfo />
           </div>
-          <p className="text-base text-gray-600 dark:text-gray-300">
-            KGI / KPI / KAI の3層構造でビジネス目標と日々のタスクを一元管理
-          </p>
-        </header>
 
-        {/* 認証情報表示 */}
-        <div className="mb-6">
-          <UserInfo />
+          <div className="rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
+            <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
+              <TaskList
+                tasks={tasks}
+                onToggleTask={toggleTask}
+                onDeleteTask={deleteTask}
+                onUpdateTask={updateTask}
+                onAddChildTask={addChildTask}
+                onRequestCreate={handleRequestCreate}
+                onSummaryInteractionChange={handleSummaryInteractionChange}
+                hiddenSummaryLevels={hiddenSummaryLevels}
+                activeId={activeId}
+                overId={overId}
+                isDroppable={isDroppable}
+                onUndo={undo}
+                onRedo={redo}
+                canUndo={canUndo}
+                canRedo={canRedo}
+              />
+            </SortableContext>
+          </div>
+
+          <div className="mt-8 rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
+            <AuthPanel />
+          </div>
+
+          <footer className="mt-10 text-center text-sm text-gray-600 dark:text-gray-400">
+            <p>
+              {isAuthenticated
+                ? "データはFirestoreに安全に保存されています。"
+                : "データはブラウザのCookieに安全に保存されています。"}
+              <br />
+              {!isAuthenticated && "ログインするとクラウド同期が有効になります。"}
+              {isSyncing && " (同期中...)"}
+            </p>
+          </footer>
         </div>
-
-        <div className="rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
-          <TaskList
-            tasks={tasks}
-            onToggleTask={toggleTask}
-            onDeleteTask={deleteTask}
-            onUpdateTask={updateTask}
-            onAddChildTask={addChildTask}
-            onRequestCreate={handleRequestCreate}
-            onSummaryInteractionChange={handleSummaryInteractionChange}
-            hiddenSummaryLevels={hiddenSummaryLevels}
-          />
-        </div>
-
-        <div className="mt-8 rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
-          <AuthPanel />
-        </div>
-
-        <footer className="mt-10 text-center text-sm text-gray-600 dark:text-gray-400">
-          <p>
-            {isAuthenticated
-              ? "データはFirestoreに安全に保存されています。"
-              : "データはブラウザのCookieに安全に保存されています。"}
-            <br />
-            {!isAuthenticated && "ログインするとクラウド同期が有効になります。"}
-            {isSyncing && " (同期中...)"}
-          </p>
-        </footer>
       </div>
 
       <GoalCreationDialog
@@ -404,6 +560,53 @@ export default function Home() {
         onSubmit={addTask}
         onClose={handleCloseDialog}
       />
-    </div>
+
+      <DragOverlay>
+        {activeTask ? (
+          <div className="opacity-95">
+            <div 
+              className={`rounded-lg border-2 p-4 shadow-2xl transition-all ${
+                isDroppable 
+                  ? "border-green-500 bg-green-50 dark:bg-green-900/30 ring-2 ring-green-400" 
+                  : overId 
+                    ? "border-red-500 bg-red-50 dark:bg-red-900/30 ring-2 ring-red-400"
+                    : "border-blue-500 bg-white dark:bg-gray-800"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span 
+                  className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                    isDroppable
+                      ? "bg-green-100 text-green-800 dark:bg-green-900/60 dark:text-green-200"
+                      : overId
+                        ? "bg-red-100 text-red-800 dark:bg-red-900/60 dark:text-red-200"
+                        : "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200"
+                  }`}
+                >
+                  {activeTask.level.toUpperCase()}
+                </span>
+                <p className="font-semibold text-gray-800 dark:text-white">{activeTask.title}</p>
+              </div>
+              {isDroppable && (
+                <div className="mt-2 flex items-center gap-1 text-xs text-green-700 dark:text-green-300">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>ドロップ可能</span>
+                </div>
+              )}
+              {overId && !isDroppable && (
+                <div className="mt-2 flex items-center gap-1 text-xs text-red-700 dark:text-red-300">
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  <span>ドロップ不可</span>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
   );
 }

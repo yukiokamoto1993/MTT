@@ -39,7 +39,7 @@ export interface Task {
   level: TaskLevel;
   parentId?: string;
   children: Task[];
-  order?: number; // ドラッグ&ドロップの順序を保持
+  order: number; // ドラッグ&ドロップの順序を保持
 }
 
 export interface TaskFormData {

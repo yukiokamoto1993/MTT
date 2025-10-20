@@ -36,6 +36,7 @@ function serializeTask(task: Task): SerializedTask {
     createdAt: task.createdAt ?? timestamp,
     updatedAt: task.updatedAt ?? timestamp,
     children: task.children?.map(serializeTask) ?? [],
+    order: task.order ?? 0,
   };
 
   // undefined を除外
@@ -44,9 +45,6 @@ function serializeTask(task: Task): SerializedTask {
   }
   if (task.parentId !== undefined) {
     serialized.parentId = task.parentId;
-  }
-  if (task.order !== undefined) {
-    serialized.order = task.order;
   }
 
   return serialized as SerializedTask;
@@ -63,8 +61,8 @@ function deserializeTask(data: SerializedTask): Task {
     createdAt: typeof data.createdAt === "string" ? data.createdAt : new Date().toISOString(),
     updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : undefined,
     children: Array.isArray(data.children) ? data.children.map(deserializeTask) : [],
-    order: typeof (data as any).order === "number" ? (data as any).order : undefined,
-  } as Task;
+    order: typeof (data as any).order === "number" ? (data as any).order : 0,
+  };
 }
 
 /**
@@ -134,11 +132,10 @@ export function subscribeTasks(userId: string, callback: (tasks: Task[]) => void
         })
         .filter((task): task is Task => task !== null)
         .sort((a, b) => {
-          // orderフィールドがある場合はそれで並び替え
-          if (a.order !== undefined && b.order !== undefined) {
+          // orderで並び替え、同じ場合はcreatedAtで並び替え
+          if (a.order !== b.order) {
             return a.order - b.order;
           }
-          // orderがない場合はcreatedAtで並び替え
           return a.createdAt.localeCompare(b.createdAt);
         });
 
@@ -160,7 +157,17 @@ export function subscribeTasks(userId: string, callback: (tasks: Task[]) => void
         }
       });
 
-      callback(rootTasks);
+      // 子タスクもorderでソート
+      function sortChildren(tasks: Task[]): Task[] {
+        return tasks
+          .sort((a, b) => a.order - b.order)
+          .map(task => ({
+            ...task,
+            children: task.children.length > 0 ? sortChildren(task.children) : task.children,
+          }));
+      }
+
+      callback(sortChildren(rootTasks));
     },
     (error) => {
       console.error("Firestore subscription error:", error);

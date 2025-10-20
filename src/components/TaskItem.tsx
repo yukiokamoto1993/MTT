@@ -390,29 +390,6 @@ export default function TaskItem({
           </div>
         </div>
       )}
-
-      {task.children.length > 0 && (
-        <div
-          className={`${timelineSpacing} space-y-2 border-l-2 pl-5 dark:pl-6 ${levelStyle.childConnector}`}
-        >
-          {task.children.map((child) => (
-            <TaskItem
-              key={child.id}
-              task={child}
-              onToggle={onToggle}
-              onDelete={onDelete}
-              onUpdate={onUpdate}
-              onAddChild={onAddChild}
-              ancestorIds={[...ancestorIds, task.id]}
-              onSummaryLevelInteractionChange={
-                onSummaryLevelInteractionChange
-              }
-              depth={depth + 1}
-              parentId={task.id}
-            />
-          ))}
-        </div>
-      )}
     </div>
   );
 }

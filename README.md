@@ -12,21 +12,24 @@ MTT (Management Task and Todo)は、KGI / KPI / KAI の3層構造で長期・中
 
 - 🎯 **KGI / KPI / KAI の3層管理** - 長期・中期・短期の目標を親子関係で整理
 - 🧭 **サマリーダッシュボード** - 目標サマリーから直接KGI/KPI/KAIを追加
-- � **Firebase Authentication** - Google / メール認証でセキュアにログイン
+- 🔐 **Firebase Authentication** - Google / メール認証でセキュアにログイン
 - ☁️ **Firestore同期** - ログイン時にデータを自動でクラウド同期
 - 🍪 **Cookie保存** - ログアウト時はブラウザにデータを安全に保存
+- 🎨 **ドラッグ&ドロップ** - 直感的なタスクの並び替えと階層移動
 - ✨ **シンプルなUI** - 直感的で使いやすいインターフェース
 - 🌙 **ダークモード対応** - システムの設定に自動対応
 - 📝 **インライン編集** - カード内で迅速に内容を更新
 - ☑️ **一括完了制御** - 親目標の完了状態を子階層へ自動反映
 - ↩️ **Undo/Redo機能** - 操作を元に戻したり、やり直したりできる
 - 👤 **認証情報表示** - ページ上部に常時ログイン状態を表示
+- 🎯 **ビジュアルフィードバック** - ドラッグ中に移動可能/不可を色で表示
 
 ## 技術スタック
 
 - **Framework**: Next.js 15+ (App Router)
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS
+- **Drag & Drop**: @dnd-kit (core, sortable, utilities)
 - **State Management**: React Hooks
 - **Authentication**: Firebase Authentication (Google, Email/Password)
 - **Database**: Cloud Firestore
@@ -51,16 +54,17 @@ MTT/
 │   │   ├── TaskForm.tsx       # タスク作成ダイアログ
 │   │   ├── TaskList.tsx       # タスクリストとサマリー
 │   │   ├── TaskItem.tsx       # 個別タスクカード
+│   │   ├── SortableTaskItem.tsx  # ドラッグ可能なタスクカード
 │   │   ├── AuthPanel.tsx      # 認証パネル（ログイン/登録）
-│   │   ├── UserInfo.tsx       # ユーザー認証情報表示
-│   │   └── ConfirmationModal.tsx  # 確認モーダル（未使用）
+│   │   └── UserInfo.tsx       # ユーザー認証情報表示
 │   ├── context/
 │   │   └── AuthContext.tsx    # Firebase認証のContext
 │   ├── hooks/
 │   │   └── useTaskSync.ts     # Cookie/Firestore同期フック
 │   ├── lib/
 │   │   ├── firebase.ts        # Firebase初期化
-│   │   └── firestoreTasks.ts  # Firestore操作関数
+│   │   ├── firestoreTasks.ts  # Firestore操作関数
+│   │   └── dragDropHelpers.ts # ドラッグ&ドロップヘルパー関数
 │   └── types/
 │       └── task.ts            # タスク型定義
 ├── public/
@@ -215,6 +219,7 @@ firebase deploy --only hosting:management-tt,firestore:management-tt
 ## 実装済み機能
 
 - ✅ KGI/KPI/KAI 3層タスク管理
+- ✅ ドラッグ&ドロップによる並び替えと階層移動
 - ✅ Firebase Authentication (Google, Email)
 - ✅ Firestore クラウド同期
 - ✅ Cookie ローカルストレージ
@@ -222,6 +227,24 @@ firebase deploy --only hosting:management-tt,firestore:management-tt
 - ✅ 認証情報表示
 - ✅ ダークモード対応
 - ✅ インライン編集
+- ✅ ビジュアルフィードバック（ドロップ可能/不可の色表示）
+
+## 使い方
+
+### タスクの作成
+1. 目標サマリーカードをクリックして新しいタスクを作成
+2. または既存タスクの「+」ボタンから子タスクを追加
+
+### タスクの並び替えと移動
+1. **同じ階層内での並び替え**: タスクをドラッグして上下に移動
+2. **異なる親への移動**: 
+   - KPIタスクを別のKGIの上にドロップ → その KGI の子になる
+   - KAIタスクを別のKPIの上にドロップ → その KPI の子になる
+3. **ビジュアルフィードバック**:
+   - 緑色のハイライト = ドロップ可能
+   - 赤色のハイライト = ドロップ不可（レベル制約違反）
+
+詳細は [docs/DRAG_DROP_GUIDE.md](docs/DRAG_DROP_GUIDE.md) を参照してください。
 
 ## トラブルシューティング
 
